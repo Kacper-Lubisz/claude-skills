@@ -7,11 +7,17 @@ before/after/diff comparison embedded).
 
 - **ImageMagick 7** (`magick`) — pixel diffs and montages (`magick compare` / `magick montage`).
   Verify: `magick --version`. `lib-diff.mjs` / `compare-screenshots.mjs` shell out to it.
-- **The `pages` skill + its daemon** — the page is authored in the pages format and served at
-  `http://localhost:4317/p/<slug>`. `build-plan.mjs` bootstraps the pages infra into `notes/pages/`
-  if absent and (re)starts the daemon. Skill: `~/.claude/skills/pages/SKILL.md`. Render gate:
-  `notes/pages/.page-assets/verify.mjs`.
+- **The `pages` skill + its daemon, confirmed up** — the page is authored in the pages format and
+  served at `http://localhost:4317/p/<slug>`. `build-plan.mjs` bootstraps the pages infra into
+  `notes/pages/` if absent and (re)starts the daemon. A printed URL is **not** proof: confirm the
+  **daemon port is bound and the page responds** (pages skill's `preflight`) before reporting it.
+  Skill: `~/.claude/skills/pages/SKILL.md`. Render gate: `notes/pages/.page-assets/verify.mjs`,
+  which drives the page with **`@playwright/test`** (import from `@playwright/test` — commonly
+  installed — not a bare `playwright` import).
 - **Node** — to run the skill's scripts (`build-plan.mjs`, `lib-diff.mjs`, `compare-screenshots.mjs`).
+- **The project's package manager** — detected from the lockfile, never hardcoded: `pnpm-lock.yaml`
+  → `pnpm install`, `yarn.lock` → `yarn`, `package-lock.json` → `npm ci`, `bun.lockb` →
+  `bun install`. Used to bootstrap a fresh worktree in the 2c fallback and to run capture scripts.
 
 ## A capture capability — EITHER of:
 
@@ -30,7 +36,10 @@ before/after/diff comparison embedded).
   tool emits it).
 - A **keyframes/events sidecar** per recording (`<base>.keyframes.json`) with `{name, tMs}` keyframes
   and `tap/type/nav` events (source-pixel coords + `size`) — from the project's capture helpers if it
-  has them, else emitted equivalently.
+  has them, else emitted equivalently. Keyframe entries may carry an optional **`mask`** array
+  (`[{x,y,w,h}]`, source pixels) to exclude animating regions (typewriters, cursors, spinners) from
+  the diff. Video keyframe diffs also default to a **higher `--fuzz`** than still screenshots to
+  absorb sub-frame animation jitter — mask the region when the change to prove is subtle.
 
 ## Per-project learned-setup doc
 
@@ -39,9 +48,22 @@ how capture works in this project: invoke command(s), output dir(s), naming/stat
 mechanism, base-ref default, video command (or n/a), and worktree/dev-server/emulator gotchas.
 Subsequent runs read it and skip discovery; re-learn only when the setup changes.
 
-## Isolation
+## Getting the BEFORE (two paths)
 
-- A **git worktree** is used to capture the BEFORE (clean base ref) without stashing/resetting the
-  user's primary checkout. A fresh worktree needs `yarn install` (no `node_modules`) and may need
-  project-specific setup (producer `dist/`, env files, a free dev-server port) — record these in the
-  learned-setup doc.
+- **Capture-before-first (primary, uncommitted changes)** — no worktree: capture the base on the
+  clean working tree, then apply/restore the change and capture the after, against the **same running
+  app on the same port**. `git stash` is fine in your **own** worktree/branch; in the user's primary
+  checkout, reach the clean/dirty states with `git apply -R` / `git apply` on the diff instead.
+- **Worktree (fallback, already-committed changes)** — a **git worktree** at the base ref captures
+  the BEFORE without touching the primary checkout. A fresh worktree needs an install with the
+  detected package manager (no `node_modules`) and may need project setup (producer `dist/`, env
+  files, a free dev-server port) — record these in the learned-setup doc.
+
+## Dev-server trust
+
+- If capture drives a browser against a dev server, **do not trust `reuseExistingServer` on a shared
+  or default port** (`:3000`/`:4000` may serve a **different app** — you'd screenshot the wrong UI).
+  Prefer a **non-default project-owned port**, and **probe the port for a project-specific marker**
+  (title/heading/API string) before capturing.
+- `notes/pages/` scratch is **not guaranteed gitignored** — never stage the page or its assets; the
+  user may need to add `notes/` to `.gitignore`.
