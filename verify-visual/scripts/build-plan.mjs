@@ -306,23 +306,30 @@ ${sectionBlocks}
   const repoRoot = path.dirname(plansDir)
   const serverCli = path.join(plansDir, '.page-assets', 'page-server.mjs')
   if (!existsSync(serverCli)) {
-    const bootstrap = path.join(os.homedir(), '.claude', 'skills', 'plan', 'bootstrap.mjs')
+    // The pages skill (renamed from the legacy `plan`) owns bootstrap.mjs; honor PAGE_SKILL_DIR.
+    const skillDir = process.env.PAGE_SKILL_DIR || path.join(os.homedir(), '.claude', 'skills', 'pages')
+    const bootstrap = path.join(skillDir, 'bootstrap.mjs')
     if (existsSync(bootstrap)) spawnSync('node', [bootstrap, repoRoot], { encoding: 'utf8', stdio: 'inherit' })
-  }
-  let url = `http://localhost:4317/p/${args.slug}`
-  if (existsSync(serverCli)) {
-    spawnSync('node', [serverCli, 'down'], { encoding: 'utf8' })
-    const r = spawnSync('node', [serverCli, 'ensure'], { encoding: 'utf8' })
-    try {
-      const status = JSON.parse((r.stdout || '').trim().split('\n').pop())
-      if (status?.port) url = `http://localhost:${status.port}/p/${args.slug}`
-    } catch { /* keep default */ }
   }
 
   console.log(`plan: ${planFile}`)
   console.log(`assets: ${assetsDir}`)
   console.log(`totals: changed=${totals.changed} added=${totals.added} removed=${totals.removed} unchanged=${totals.unchanged}`)
-  console.log(`url: ${url}`)
+
+  // Only advertise a URL once the daemon has actually bound the port — never a false success.
+  if (!existsSync(serverCli)) {
+    console.error(`ERROR: pages daemon not installed (no ${serverCli}). Install the pages skill or set PAGE_SKILL_DIR, then run: node <repo>/notes/pages/.page-assets/page-server.mjs up`)
+    process.exit(1)
+  }
+  spawnSync('node', [serverCli, 'down'], { encoding: 'utf8' })
+  const r = spawnSync('node', [serverCli, 'up'], { encoding: 'utf8' })
+  let status = null
+  try { status = JSON.parse((r.stdout || '').trim().split('\n').pop()) } catch { /* noop */ }
+  if (!status?.running) {
+    console.error(`ERROR: pages daemon failed to start — page written but NOT serving. See requirements.md (needs vite/tailwind/react resolvable). Last status: ${(r.stdout || r.stderr || '').trim().split('\n').pop()}`)
+    process.exit(1)
+  }
+  console.log(`url: http://localhost:${status.port || 4317}/p/${args.slug}`)
 }
 
 main()
