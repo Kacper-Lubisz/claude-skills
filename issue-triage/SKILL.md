@@ -9,7 +9,11 @@ description: |
   candidate issues (errors, performance regressions, security/dep alerts,
   regressions from what shipped), writes a dated report, and hands the
   candidates to the `triage` decision board (issue-triage discovers → triage
-  decides). Sources come from a PER-PROJECT config, never hardcoded here.
+  decides). Sources come from a PER-PROJECT config, never hardcoded here —
+  EXCEPT the config-free static / source-review fallback, which always runs
+  (even on a fresh, uninstrumented repo) so the skill never dead-ends. When no
+  config exists it auto-detects what's present, offers to scaffold a starter
+  config, and still runs the static review.
   Trigger when the user types /issue-triage, says "issue triage", "what's
   broken", "scan for issues", or the aliases "morning briefing", "daily
   rundown", "what happened overnight".
@@ -41,9 +45,35 @@ or the relevant section of its `CLAUDE.md`. That config tells you which sources
 exist and how to query each (cloud-logs CLI + project id, error-tracker
 access, dependency/security alerts, release source, optional analytics).
 
-If no config is found, tell the user the skill needs a per-project source
-config and point them at `requirements.md`; do not guess provider names,
-project ids, or paths. Only spawn an agent for a source the config declares.
+**Never dead-end on a missing config.** The **static / source-review** agent
+(below) is config-free and ALWAYS runs — it reads the source/working tree
+directly, so it works on a fresh, uninstrumented repo with zero observability
+wired up. So the skill always produces a report. Only spawn a *configured*-source
+agent (logs / error tracker / dep alerts / release / analytics) for a source the
+config declares; never guess provider names, project ids, or paths for those.
+
+### Bootstrap / init (when no config is found)
+
+When there is no `.issue-triage.json` and no CLAUDE.md config section, do NOT
+stop and tell the user to go write one. Instead:
+
+1. **Auto-detect what's present** (all read-only, best-effort):
+   - Git remote host — `git remote get-url origin` → is it **github.com**,
+     **gitlab** (gitlab.com or self-hosted), Bitbucket, or none? This picks the
+     dep-alert / release tooling (`gh` vs `glab` / GitLab API).
+   - Error tracker — grep the dependency manifest(s) for `@sentry/*`,
+     `sentry-sdk`, `sentry`, `bugsnag`, `rollbar`, etc.
+   - Cloud logs — is there a `gcloud` config / GCP project (`gcloud config get
+     core/project`), an AWS/`aws` profile, or none?
+   - CI provider — `.gitlab-ci.yml`, `.github/workflows/`, `.circleci/`, etc.
+2. **Offer to scaffold** a starter `.issue-triage.json` at the repo root (see
+   `requirements.md` for shape) with the detected sources enabled and the rest
+   stubbed with `TODO` placeholders + a one-line comment on how to fill each.
+   Tell the user it's gitignored; add it to `.gitignore` if not already covered.
+3. **Run anyway.** Regardless of whether the user takes the scaffold, proceed to
+   Phase 1 and run **at minimum the static / source-review agent**, plus any
+   source you just detected+confirmed. A first run should always yield findings,
+   not a setup lecture.
 
 ## Inputs
 
@@ -68,7 +98,47 @@ advisory URL, commit SHA) so a reader audits it in one click.
 
 The agents below are **generic archetypes**. Substitute the concrete provider,
 project id, CLI, and access method from the per-project config — the examples
-are only to show shape. Skip any archetype the project doesn't configure.
+are only to show shape. Skip any archetype the project doesn't configure — with
+ONE exception: the **static / source-review** agent is config-free and always
+runs, so there is always at least one agent in the fan-out even on a fresh repo.
+
+### Agent — Static / source-review (config-free — ALWAYS runs)
+
+The only source that needs **no** observability config: it reviews the
+**source tree and working tree directly**, so it runs on a brand-new,
+uninstrumented repo. Run it every time — highest priority, and on a repo with no
+configured sources it may be the *only* agent. Strictly read-only (read files,
+`git` inspection, `grep`/`rg`); never edits or runs the app.
+
+Scan for shipped-to-users problems a reviewer would catch by reading the code:
+
+- **Leftover demo / mock / seed data** reaching real users — hardcoded sample
+  users, `lorem ipsum`, `TODO`/`FIXME`/`XXX`/`HACK`, `mockData`, `dummy`,
+  `placeholder`, test fixtures imported by production code.
+- **Dead / prototype / unreferenced routes** — pages/handlers/components that
+  nothing links to, `/test`, `/demo`, `/playground`, commented-out route
+  registrations.
+- **Committed secrets / env files** — tracked `.env*`, API keys, tokens,
+  private keys, connection strings in source (`git ls-files | grep -Ei
+  'env|secret|key'`, plus entropy/`AKIA`/`sk_live`/`-----BEGIN` scans).
+- **Hardcoded URLs / hosts** — `http://localhost:PORT`, `127.0.0.1`, staging or
+  personal hostnames, IPs baked into shipping code instead of config/env.
+- **Missing tests** — production modules/routes with no adjacent or referencing
+  test; note whether a test runner is even wired up.
+- **i18n / l10n gaps** — hardcoded user-facing strings where the project has an
+  i18n setup, or an i18n setup with untranslated/`MISSING`-keyed strings.
+- **Insecure config** — cookies `secure: false` / `httpOnly: false` /
+  `sameSite` unset, weak or fallback secrets (`secret || 'dev'`, `changeme`),
+  `NODE_TLS_REJECT_UNAUTHORIZED=0`, permissive CORS (`*`), disabled auth checks.
+- **Obvious bugs** — swallowed errors (`catch {}`), unhandled promise rejections,
+  `== null` foot-guns, off-by-one/array-bounds, `any`-cast escape hatches around
+  suspicious logic, unreachable code.
+
+Adapt the checklist to the stack you actually see (framework, language,
+package manager). For each finding give: category, file:line (a source-of-truth
+link a reader can open), one-line description, and severity guess. Group by
+category. Output `## Static review`. Read-only. Cap 500 words (this agent
+typically carries the most items on an uninstrumented repo).
 
 ### Agent — Application / cloud logs
 
@@ -156,7 +226,9 @@ Save it to the report path the config names, else the skill-local archive
 `~/.claude/skills/issue-triage/reports/{{REPORT_DATE}}.md`. If a project also
 wants a repo-local copy (gitignored), write the same content to both and keep
 them in sync. Suggested section order: Release → Logs → Error tracker →
-Dependency alerts → Analytics → any project-defined sources.
+Dependency alerts → Analytics → Static review → any project-defined sources.
+(On an uninstrumented repo the report may be Static review alone — that's a
+valid, complete report, not a failure.)
 
 If a single sub-agent fails, continue with the others — a partial report beats
 none. Note the failure in that section (`## Logs: agent failed — <reason>`).
@@ -173,7 +245,7 @@ resolves, no deploys). The user triages on the board asynchronously; the
 
 Suggested candidate framing for the board (draft only — the board decides):
 - title ≤70 chars: `[error] <fingerprint>` / `[security] bump <pkg> — <sev>` /
-  `[perf] <screen> p95 +<pct>%`
+  `[perf] <screen> p95 +<pct>%` / `[static] <category> — <file>`
 - body: Symptom · First seen · Frequency · Affected service/route · Suspected
   cause · Links
 - priority: 1 critical security · 2 user-impacting & frequent · 3 medium ·
@@ -183,8 +255,9 @@ Suggested candidate framing for the board (draft only — the board decides):
 ## Final summary
 
 Print a terse top-level summary (≤15 lines): per-source candidate counts
-(errors, perf flags, dependency alerts split critical+high / new-in-window,
-analytics anomalies, shipped commits), the report path, the triage board URL,
+(static-review findings by category, errors, perf flags, dependency alerts split
+critical+high / new-in-window, analytics anomalies, shipped commits), the report
+path, the triage board URL,
 and 1–3 "what to look at first" bullets. Don't re-paste the full report. End
 the turn.
 
