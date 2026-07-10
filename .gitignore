@@ -1,0 +1,24 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Temp files
+*.tmp
+*.log
+
+# If using submodules for external skills later
+# external/
+
+# Issue-triage reports — machine-local
+issue-triage/reports/
+
+# Per-machine DB connection env (never commit — see mongosh/redis requirements.md)
+mongosh/env
+redis/env
