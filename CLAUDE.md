@@ -30,6 +30,13 @@ project-specific facts.
    committed plan files, commit-by-hunk hygiene, and task-end cleanup. Apply its fixes; don't argue.
 9. **Route non-trivial fixes through a PR**, not a direct push to the default branch.
 
+## External services
+
+- **Writing to Notion requires my explicit permission.** Treat the Notion MCP as read-only by
+  default: never create, update, move, or comment on Notion pages unless I explicitly ask for that
+  write in the current conversation. A request to "write something up" is not permission to put it
+  in Notion — draft it in chat or a page first.
+
 ## Code taste (generic — repo conventions still win)
 
 - **Prefer IIFEs over `let` for conditional initialization** — keep the binding `const`, make cases
