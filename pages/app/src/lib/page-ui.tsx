@@ -290,9 +290,21 @@ function SideNav() {
         .filter(x => x.title)
       setItems(prev => (prev.length === list.length && prev.every((p, i) => p.id === list[i].id && p.title === list[i].title && p.level === list[i].level) ? prev : list))
     }
-    scan()
+    // Heading ids only exist after scan() runs, which is after the browser's
+    // native jump-to-#hash on document load — so honor the initial hash
+    // ourselves, once, as soon as its target id materialises.
+    let hashHonored = false
+    const honorHash = () => {
+      if (hashHonored) return
+      const id = decodeURIComponent(window.location.hash.slice(1))
+      if (!id) { hashHonored = true; return }
+      const el = document.getElementById(id)
+      if (el) { el.scrollIntoView({ block: 'start' }); hashHonored = true }
+    }
+    const scanAndHonor = () => { scan(); honorHash() }
+    scanAndHonor()
     // childList-only observer: setting el.id/style above emits attribute mutations we must not loop on
-    const mo = new MutationObserver(scan)
+    const mo = new MutationObserver(scanAndHonor)
     mo.observe(document.body, { childList: true, subtree: true })
     const onScroll = () => {
       let cur = ''
@@ -373,7 +385,7 @@ export function P({ children }: { children: ReactNode }) {
 export function UL({ children, items }: { children?: ReactNode; items?: ReactNode[] }) {
   // `items` is an authoring convenience (and a real-world footgun repair: pages have
   // passed items={[…]} expecting it to work, and the list silently rendered empty).
-  return <ul className="mb-4 list-disc space-y-1 pl-6 leading-relaxed marker:text-slate-400 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-slate-700 [&_strong]:font-semibold">{items ? items.map((x, i) => <li key={i}>{x}</li>) : children}</ul>
+  return <ul className="mb-4 list-disc space-y-1 pl-6 leading-relaxed marker:text-slate-400 [&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-slate-700 [&_strong]:font-semibold">{items ? items.map((x, i) => <li key={i}>{x}</li>) : children}</ul>
 }
 export function Pre({ children }: { children: ReactNode }) {
   return <pre className="mb-4 overflow-x-auto rounded-md bg-slate-100 px-4 py-3.5 font-mono text-[13px] leading-relaxed text-slate-700">{children}</pre>
@@ -759,7 +771,7 @@ export function Card({ rank, title, pills, variant, children }: {
             {pills}
           </div>
         )}
-        <div className="text-sm leading-relaxed text-slate-600 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-slate-700 [&_p]:m-0 [&_strong]:font-semibold">{children}</div>
+        <div className="text-sm leading-relaxed text-slate-600 [&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-slate-700 [&_p]:m-0 [&_strong]:font-semibold">{children}</div>
       </div>
     </div>
   )
@@ -1001,7 +1013,7 @@ export function KvTable({ rows }: { rows: { from: ReactNode; to?: ReactNode; not
               <td className="whitespace-nowrap px-3.5 py-2 align-top font-mono text-xs text-slate-600">{r.from}</td>
               {r.to !== undefined && <td className="w-5 px-1 py-2 text-center align-top text-slate-400">→</td>}
               {r.to !== undefined && <td className="px-3.5 py-2 align-top font-mono text-xs font-medium text-blue-600">{r.to}</td>}
-              {r.note !== undefined && <td className="px-3.5 py-2 align-top text-[12.5px] text-slate-600">{r.note}</td>}
+              {r.note !== undefined && <td className="px-3.5 py-2 align-top text-[12.5px] text-slate-600 [&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2">{r.note}</td>}
             </tr>
           ))}
         </tbody>
@@ -1055,7 +1067,7 @@ export function DecisionTable({ head, rows }: { head: ReactNode[]; rows: ReactNo
         <thead><tr>{head.map((h, i) => <th key={i} className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">{h}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => (
           <tr key={i} className="border-t border-slate-200 first:border-t-0">
-            {r.map((c, j) => <td key={j} className="px-4 py-2.5 align-top [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-slate-700">{c}</td>)}
+            {r.map((c, j) => <td key={j} className="px-4 py-2.5 align-top [&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2 [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-slate-700">{c}</td>)}
           </tr>
         ))}</tbody>
       </table>
