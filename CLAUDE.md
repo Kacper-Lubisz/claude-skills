@@ -53,7 +53,8 @@ project-specific facts.
 - **`pages`** — structured pages (plans, design docs, RCAs, work summaries) as React + Tailwind,
   served locally, publishable. Subskills: **`triage`** (decision board) and **`verify-visual`**
   (before/after + flow, learn-first per project). Import real project components into a page via the
-  per-project coupling config.
+  per-project coupling config. Lives in its own repo
+  ([`Kacper-Lubisz/pages`](https://github.com/Kacper-Lubisz/pages)), checked out here as a submodule.
 - **`issue-triage`** — scan a project's configured observability/error sources → surface candidates →
   hand to a `triage` board. The "find" half; `triage` is the "decide" half.
 - **`mongosh` / `redis`** — generic DB shells; the connection URI is per-machine (env var or a

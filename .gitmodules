@@ -1,3 +1,6 @@
 [submodule "vendor/anthropic-skills"]
 	path = vendor/anthropic-skills
 	url = https://github.com/anthropics/skills.git
+[submodule "pages"]
+	path = pages
+	url = https://github.com/Kacper-Lubisz/pages
